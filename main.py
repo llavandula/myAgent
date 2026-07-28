@@ -14,7 +14,7 @@ from colorama import init, Fore, Style
 
 from agent.core import get_agent
 
-init(autoreset=True)
+init(autoreset=True)InMemorySaver
 
 
 def print_banner():

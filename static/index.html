@@ -1,211 +1,430 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agent Chat</title>
 <style>
-  :root {
-    --bg: #1a1a2e;
-    --surface: #16213e;
-    --surface2: #0f3460;
-    --accent: #e94560;
-    --text: #eee;
-    --text2: #aaa;
-    --user-bubble: #0f3460;
-    --ai-bubble: #1a1a2e;
-    --tool-bg: #2a2a4a;
-    --tool-accent: #00d2ff;
+  /* ========= 浅色主题（默认） ========= */
+  [data-theme="light"] {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f7f7f8;
+    --bg-tertiary: #ececf1;
+    --border: #e5e5e5;
+    --text-primary: #1a1a2e;
+    --text-secondary: #6e6e80;
+    --text-tertiary: #9a9aaf;
+    --brand: #10a37f;
+    --brand-hover: #0d8c6d;
+    --user-msg-bg: var(--bg-primary);
+    --agent-msg-bg: var(--bg-secondary);
+    --avatar-user-bg: #d9d9e3;
+    --avatar-user-text: #565869;
+    --tool-bg: #f0f0f5;
+    --tool-border: #10a37f;
+    --input-bg: #ffffff;
+    --input-border: #d9d9e3;
+    --code-bg: #f0f0f5;
+    --pre-bg: #1a1a2e;
+    --pre-text: #e5e5e5;
+    --shadow: 0 1px 3px rgba(0,0,0,.08);
   }
+
+  /* ========= 深色主题 ========= */
+  [data-theme="dark"] {
+    --bg-primary: #343541;
+    --bg-secondary: #444654;
+    --bg-tertiary: #40414f;
+    --border: #565869;
+    --text-primary: #ececf1;
+    --text-secondary: #acacbe;
+    --text-tertiary: #8e8ea0;
+    --brand: #19c99a;
+    --brand-hover: #10a37f;
+    --user-msg-bg: var(--bg-primary);
+    --agent-msg-bg: var(--bg-secondary);
+    --avatar-user-bg: #565869;
+    --avatar-user-text: #d9d9e3;
+    --tool-bg: #2d2d3d;
+    --tool-border: #19c99a;
+    --input-bg: #40414f;
+    --input-border: #565869;
+    --code-bg: rgba(0,0,0,.35);
+    --pre-bg: #000000;
+    --pre-text: #e5e5e5;
+    --shadow: 0 1px 3px rgba(0,0,0,.25);
+  }
+
   * { margin:0; padding:0; box-sizing:border-box; }
+
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--bg); color: var(--text);
-    display: flex; justify-content: center; align-items: center;
-    height: 100vh; overflow: hidden;
-  }
-  .app {
-    width: 100%; max-width: 760px; height: 100vh;
-    display: flex; flex-direction: column;
-    background: var(--surface);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: background .3s, color .3s;
   }
 
-  /* 顶栏 */
-  .header {
-    padding: 16px 20px;
-    display: flex; justify-content: space-between; align-items: center;
-    border-bottom: 1px solid rgba(255,255,255,.08);
+  /* 顶部栏 */
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
     flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    transition: border-color .3s;
   }
-  .header h1 { font-size: 18px; font-weight: 600; }
-  .header .dot { color: #4ade80; margin-right: 6px; }
-  .btn-reset {
-    background: none; border: 1px solid rgba(255,255,255,.15);
-    color: var(--text2); padding: 6px 14px; border-radius: 6px;
-    cursor: pointer; font-size: 13px; transition: .2s;
+  .btn-new-chat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: .15s;
   }
-  .btn-reset:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-new-chat:hover {
+    border-color: var(--brand);
+    color: var(--brand);
+  }
+  .btn-new-chat svg { width: 15px; height: 15px; }
 
-  /* 消息区 */
-  .messages {
-    flex: 1; overflow-y: auto; padding: 20px;
-    display: flex; flex-direction: column; gap: 16px;
+  /* 消息滚动区 */
+  .chat-body {
+    flex: 1;
+    overflow-y: auto;
     scroll-behavior: smooth;
   }
+
+  /* 空状态 */
   .empty-state {
-    flex: 1; display: flex; align-items: center; justify-content: center;
-    color: var(--text2); font-size: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text-tertiary);
   }
+  .empty-state svg { width: 48px; height: 48px; opacity: .35; }
+  .empty-state svg path { stroke: var(--text-tertiary); }
+  .empty-state h2 { font-size: 22px; font-weight: 500; color: var(--text-secondary); }
+  .empty-state p { font-size: 14px; }
 
-  /* 聊天气泡 */
-  .msg { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn .25s; }
-  .msg.user { align-self: flex-end; }
-  .msg.agent { align-self: flex-start; }
-  .msg .label {
-    font-size: 11px; color: var(--text2); margin-bottom: 4px;
+  /* 每条消息 */
+  .msg-row {
+    padding: 24px 16px;
+    display: flex;
+    gap: 16px;
+    animation: fadeIn .25s ease;
+    transition: background .3s;
   }
-  .msg .bubble {
-    padding: 12px 16px; border-radius: 12px; line-height: 1.6;
-    font-size: 14px; white-space: pre-wrap; word-break: break-word;
-  }
-  .msg.user .bubble { background: var(--user-bubble); border-bottom-right-radius: 4px; }
-  .msg.agent .bubble { background: var(--ai-bubble); border: 1px solid rgba(255,255,255,.06); border-bottom-left-radius: 4px; }
+  .msg-row.user { background: var(--user-msg-bg); }
+  .msg-row.agent { background: var(--agent-msg-bg); }
 
-  /* 工具调用卡片 */
-  .tool-block {
-    background: var(--tool-bg);
-    border-left: 3px solid var(--tool-accent);
-    border-radius: 6px; padding: 10px 14px; margin: 4px 0;
+  .msg-row .avatar {
+    width: 30px; height: 30px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px; font-weight: 700;
+  }
+  .msg-row.user .avatar { background: var(--avatar-user-bg); color: var(--avatar-user-text); }
+  .msg-row.agent .avatar { background: var(--brand); color: #fff; }
+
+  .msg-row .content {
+    flex: 1;
+    max-width: 800px;
+    line-height: 1.8;
+    font-size: 15px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* 工具调用 */
+  .tool-inline {
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--tool-border);
+    border-radius: 6px;
+    overflow: hidden;
     font-size: 13px;
-    animation: fadeIn .25s;
-    align-self: flex-start; max-width: 85%;
+    background: var(--tool-bg);
   }
-  .tool-block .tool-name { color: var(--tool-accent); font-weight: 600; margin-bottom: 4px; }
-  .tool-block .tool-args { color: var(--text2); font-size: 12px; margin-bottom: 6px; }
-  .tool-block .tool-result { color: #86efac; font-size: 12px; word-break: break-word; }
-  .tool-block .tool-label { font-size: 10px; color: var(--text2); text-transform: uppercase; margin-top: 2px; }
+  .tool-inline .tool-header {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--brand);
+    font-weight: 500;
+    user-select: none;
+  }
+  .tool-inline .tool-header:hover { opacity: .8; }
+  .tool-inline .tool-header .arrow {
+    transition: .2s;
+    font-size: 10px;
+    display: inline-block;
+  }
+  .tool-inline.open .tool-header .arrow { transform: rotate(90deg); }
+  .tool-inline .tool-body {
+    padding: 0 12px 10px;
+    display: none;
+    color: var(--text-secondary);
+  }
+  .tool-inline.open .tool-body { display: block; }
+  .tool-inline .tool-body .args { margin-bottom: 6px; opacity: .7; }
+  .tool-inline .tool-body .result { color: var(--text-primary); }
 
   /* 加载动画 */
   .loading {
-    align-self: flex-start; display: flex; gap: 6px; padding: 12px 16px;
+    padding: 24px 16px;
+    display: flex;
+    gap: 6px;
+    background: var(--agent-msg-bg);
+    transition: background .3s;
   }
-  .loading span {
-    width: 8px; height: 8px; border-radius: 50%; background: var(--text2);
-    animation: bounce 1.2s infinite;
+  .loading .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    animation: bounce 1.4s infinite;
   }
-  .loading span:nth-child(2) { animation-delay: .2s; }
-  .loading span:nth-child(3) { animation-delay: .4s; }
+  .loading .dot:nth-child(2) { animation-delay: .2s; }
+  .loading .dot:nth-child(3) { animation-delay: .4s; }
   @keyframes bounce {
-    0%,80%,100% { transform: translateY(0); opacity: .3; }
-    40% { transform: translateY(-8px); opacity: 1; }
+    0%,80%,100% { transform: translateY(0); opacity: .25; }
+    40% { transform: translateY(-5px); opacity: 1; }
   }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } }
 
-  /* 输入区 */
-  .input-area {
-    display: flex; gap: 10px; padding: 14px 20px;
-    border-top: 1px solid rgba(255,255,255,.08);
-    flex-shrink: 0; background: var(--surface);
+  /* 底部输入区 */
+  .chat-footer {
+    padding: 12px 16px 24px;
+    background: var(--bg-primary);
+    flex-shrink: 0;
+    transition: background .3s;
   }
-  .input-area input {
-    flex: 1; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
-    border-radius: 10px; padding: 12px 16px; color: var(--text);
-    font-size: 14px; outline: none; transition: .2s;
+  .input-wrapper {
+    max-width: 816px;
+    margin: 0 auto;
+    display: flex;
+    gap: 8px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    padding: 8px 8px 8px 16px;
+    transition: .2s;
+    box-shadow: var(--shadow);
   }
-  .input-area input:focus { border-color: var(--accent); }
-  .input-area input::placeholder { color: var(--text2); }
-  .input-area button {
-    background: var(--accent); border: none; border-radius: 10px;
-    padding: 12px 20px; color: #fff; font-size: 14px; font-weight: 600;
-    cursor: pointer; transition: .2s;
+  .input-wrapper:focus-within {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 2px rgba(16,163,127,.2);
   }
-  .input-area button:hover { opacity: .85; }
-  .input-area button:disabled { opacity: .4; cursor: not-allowed; }
+  .input-wrapper textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-family: inherit;
+    resize: none;
+    max-height: 150px;
+    line-height: 1.5;
+    padding: 4px 0;
+  }
+  .input-wrapper textarea::placeholder { color: var(--text-tertiary); }
+  .input-wrapper button {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    border: none;
+    background: var(--text-tertiary);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: .15s;
+  }
+  .input-wrapper button:not(:disabled):hover { background: var(--brand); }
+  .input-wrapper button:disabled { opacity: .3; cursor: not-allowed; }
+  .input-wrapper button svg { width: 16px; height: 16px; }
+
+  .footer-row {
+    max-width: 816px;
+    margin: 8px auto 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+  .footer-row a {
+    color: var(--text-tertiary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: .15s;
+  }
+  .footer-row a:hover { color: var(--brand); }
+
+  /* 主题切换按钮 */
+  .theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px;
+    transition: .2s;
+  }
+  .theme-toggle:hover { border-color: var(--brand); }
+  .theme-toggle .option {
+    padding: 3px 10px;
+    border-radius: 16px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: .2s;
+    color: var(--text-tertiary);
+  }
+  .theme-toggle .option.active {
+    background: var(--brand);
+    color: #fff;
+  }
+  .theme-toggle .option svg { width: 14px; height: 14px; }
+
+  /* 滚动条 */
+  .chat-body::-webkit-scrollbar { width: 6px; }
+  .chat-body::-webkit-scrollbar-track { background: transparent; }
+  .chat-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* 代码 */
+  .msg-row .content code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .msg-row .content pre {
+    background: var(--pre-bg);
+    color: var(--pre-text);
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 8px 0;
+  }
+  .msg-row .content pre code { background: none; padding: 0; color: inherit; }
+
+  /* 响应式 */
+  @media (max-width: 640px) {
+    .msg-row { padding: 16px 10px; gap: 10px; }
+    .msg-row .content { font-size: 14px; }
+    .chat-footer { padding: 10px 10px 16px; }
+  }
 </style>
 </head>
 <body>
 
-<div class="app">
-  <div class="header">
-    <h1><span class="dot">●</span>Agent Chat</h1>
-    <button class="btn-reset" onclick="doReset()">⟳ 新对话</button>
+<div class="topbar">
+  <button class="btn-new-chat" onclick="doReset()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path d="M9 12h6M12 9v6"/></svg>
+    新对话
+  </button>
+  <div class="theme-toggle" onclick="toggleTheme()" id="themeToggle">
+    <span class="option active" data-theme-val="light">Light</span>
+    <span class="option" data-theme-val="dark">Dark</span>
   </div>
+</div>
 
-  <div class="messages" id="messages">
-    <div class="empty-state">输入消息开始对话</div>
+<div class="chat-body" id="chatBody">
+  <div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+    <h2>有什么可以帮你的？</h2>
+    <p>你可以问问题、让 Agent 帮你计算或获取信息</p>
   </div>
+</div>
 
-  <div class="input-area">
-    <input type="text" id="input" placeholder="输入消息..." onkeydown="if(event.key==='Enter')send()" autofocus>
-    <button id="sendBtn" onclick="send()">发送</button>
+<div class="chat-footer">
+  <div class="input-wrapper">
+    <textarea id="input" placeholder="发送消息..." rows="1" onkeydown="handleKey(event)"></textarea>
+    <button id="sendBtn" onclick="send()" title="发送">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+      </svg>
+    </button>
+  </div>
+  <div class="footer-row">
+    <span>按 Enter 发送，Shift+Enter 换行</span>
   </div>
 </div>
 
 <script>
+// ====== 主题 ======
+const html = document.documentElement;
+const savedTheme = localStorage.getItem('theme') || 'light';
+html.setAttribute('data-theme', savedTheme);
+updateThemeToggle(savedTheme);
+
+function toggleTheme() {
+  const current = html.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  updateThemeToggle(next);
+}
+
+function updateThemeToggle(theme) {
+  document.querySelectorAll('.theme-toggle .option').forEach(el => {
+    el.classList.toggle('active', el.dataset.themeVal === theme);
+  });
+}
+
+// ====== 会话 ======
 const sessionId = (() => {
   let id = localStorage.getItem('agent_session_id');
   if (!id) { id = crypto.randomUUID(); localStorage.setItem('agent_session_id', id); }
   return id;
 })();
 
-const msgBox = document.getElementById('messages');
+const chatBody = document.getElementById('chatBody');
 const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('sendBtn');
 
-function scrollBottom() { msgBox.scrollTop = msgBox.scrollHeight; }
+inputEl.addEventListener('input', () => {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 150) + 'px';
+});
+
+function scrollBottom() {
+  chatBody.scrollTop = chatBody.scrollHeight;
+}
 
 function clearEmpty() {
-  const empty = msgBox.querySelector('.empty-state');
+  const empty = chatBody.querySelector('.empty-state');
   if (empty) empty.remove();
 }
 
-function addMessage(role, content) {
-  clearEmpty();
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  div.innerHTML = `<div class="label">${role === 'user' ? '你' : 'Agent'}</div>
-                   <div class="bubble">${escapeHtml(content)}</div>`;
-  msgBox.appendChild(div);
-  scrollBottom();
-  return div;
-}
-
-function addToolBlock(toolName, args) {
-  clearEmpty();
-  const div = document.createElement('div');
-  div.className = 'tool-block';
-  const argsStr = args && Object.keys(args).length
-    ? Object.entries(args).map(([k,v]) => `${k}=${JSON.stringify(v)}`).join(', ')
-    : '无参数';
-  div.innerHTML = `<div class="tool-name">🔧 ${toolName}</div>
-                   <div class="tool-args">参数: ${argsStr}</div>`;
-  div._toolName = toolName;
-  msgBox.appendChild(div);
-  scrollBottom();
-  return div;
-}
-
-function appendToolResult(block, result) {
-  const el = document.createElement('div');
-  el.className = 'tool-result';
-  el.innerHTML = `<span class="tool-label">返回:</span> ${escapeHtml(result)}`;
-  block.appendChild(el);
-  scrollBottom();
-}
-
-function addLoading() {
-  clearEmpty();
-  const div = document.createElement('div');
-  div.className = 'loading';
-  div.id = 'loading';
-  div.innerHTML = '<span></span><span></span><span></span>';
-  msgBox.appendChild(div);
-  scrollBottom();
-}
-
-function removeLoading() {
-  const el = document.getElementById('loading');
-  if (el) el.remove();
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
 }
 
 function escapeHtml(str) {
@@ -214,10 +433,99 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
+function formatMarkdown(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  return html;
+}
+
+function addMessage(role, content) {
+  clearEmpty();
+  const row = document.createElement('div');
+  row.className = `msg-row ${role}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = role === 'user' ? 'U' : 'AI';
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'content';
+  contentDiv.innerHTML = role === 'user' ? escapeHtml(content) : formatMarkdown(content);
+
+  row.appendChild(avatar);
+  row.appendChild(contentDiv);
+  chatBody.appendChild(row);
+  scrollBottom();
+  return row;
+}
+
+function addToolBlock(toolName, args) {
+  clearEmpty();
+  const row = document.createElement('div');
+  row.className = 'msg-row agent';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = 'AI';
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'content';
+
+  const argsStr = args && Object.keys(args).length
+    ? Object.entries(args).map(([k,v]) => `${k}=${JSON.stringify(v)}`).join(', ')
+    : '';
+
+  contentDiv.innerHTML = `
+    <div class="tool-inline open">
+      <div class="tool-header" onclick="this.parentElement.classList.toggle('open')">
+        <span class="arrow">▶</span>
+        正在使用工具: ${escapeHtml(toolName)}
+      </div>
+      <div class="tool-body">
+        ${argsStr ? `<div class="args">${escapeHtml(argsStr)}</div>` : ''}
+        <div class="result loading-dots">处理中...</div>
+      </div>
+    </div>
+  `;
+
+  row.appendChild(avatar);
+  row.appendChild(contentDiv);
+  chatBody.appendChild(row);
+  scrollBottom();
+  return contentDiv.querySelector('.tool-inline');
+}
+
+function appendToolResult(block, result) {
+  const resultDiv = block.querySelector('.result');
+  if (resultDiv) {
+    resultDiv.className = 'result';
+    resultDiv.textContent = result;
+  }
+  scrollBottom();
+}
+
+function addLoading() {
+  clearEmpty();
+  const div = document.createElement('div');
+  div.className = 'loading';
+  div.id = 'loading';
+  div.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  chatBody.appendChild(div);
+  scrollBottom();
+}
+
+function removeLoading() {
+  const el = document.getElementById('loading');
+  if (el) el.remove();
+}
+
+// ====== 发送消息 ======
 async function send() {
   const msg = inputEl.value.trim();
   if (!msg) return;
   inputEl.value = '';
+  inputEl.style.height = 'auto';
   sendBtn.disabled = true;
 
   addMessage('user', msg);
@@ -255,12 +563,11 @@ async function send() {
 
           switch (eventType) {
             case 'tool_call':
+              removeLoading();
               currentToolBlock = addToolBlock(data.tool, data.args);
               break;
             case 'tool_result':
-              if (currentToolBlock) {
-                appendToolResult(currentToolBlock, data.result);
-              }
+              if (currentToolBlock) appendToolResult(currentToolBlock, data.result);
               break;
             case 'text':
               removeLoading();
@@ -292,7 +599,15 @@ async function doReset() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId }),
   });
-  msgBox.innerHTML = '<div class="empty-state">对话已重置，开始新的对话吧</div>';
+  chatBody.innerHTML = `
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
+      <h2>对话已重置</h2>
+      <p>开始新的对话吧</p>
+    </div>
+  `;
 }
 </script>
 </body>
