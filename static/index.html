@@ -329,6 +329,42 @@
   }
   .msg-row .content pre code { background: none; padding: 0; color: inherit; }
 
+  /* ===== Markdown 排版 ===== */
+  .msg-row .content > :first-child { margin-top: 0; }
+  .msg-row .content > :last-child { margin-bottom: 0; }
+  .msg-row .content h1,
+  .msg-row .content h2,
+  .msg-row .content h3,
+  .msg-row .content h4 {
+    margin: 16px 0 8px;
+    line-height: 1.4;
+    font-weight: 600;
+  }
+  .msg-row .content h1 { font-size: 22px; }
+  .msg-row .content h2 { font-size: 19px; }
+  .msg-row .content h3 { font-size: 17px; }
+  .msg-row .content p { margin: 0 0 10px; }
+  .msg-row .content ul,
+  .msg-row .content ol { margin: 0 0 10px; padding-left: 22px; }
+  .msg-row .content li { margin: 4px 0; }
+  .msg-row .content blockquote {
+    margin: 0 0 10px;
+    padding: 4px 12px;
+    border-left: 3px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .msg-row .content a { color: var(--brand); text-decoration: underline; }
+  .msg-row .content table {
+    border-collapse: collapse;
+    margin: 0 0 10px;
+    font-size: 14px;
+  }
+  .msg-row .content th,
+  .msg-row .content td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+  }
+
   /* 响应式 */
   @media (max-width: 640px) {
     .msg-row { padding: 16px 10px; gap: 10px; }
@@ -336,6 +372,9 @@
     .chat-footer { padding: 10px 10px 16px; }
   }
 </style>
+<!-- Markdown 渲染：marked 负责解析，DOMPurify 负责清洗防 XSS -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 </head>
 <body>
 
@@ -433,11 +472,23 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
-function formatMarkdown(text) {
-  let html = escapeHtml(text);
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+function renderMarkdown(text) {
+  // CDN 没加载成功时降级为纯文本,避免白屏
+  if (typeof marked === 'undefined') return escapeHtml(text);
+
+  // 预处理：修正 AI 常见的非标准 markdown 格式
+  // 1. "文字###数字." 内联伪标题 → 独立标题行
+  text = text.replace(/(\S)(#{1,6})(\d+[\.\、])/g, '$1\n\n$2$3');
+  // 2. "###数字." 行首但后面没空格 → 补空格（markdown 标准要求 # 后有空格）
+  text = text.replace(/^(#{1,6})(\d+[\.\、])(?!\s)/gm, '$1 $2');
+
+  let html = marked.parse(text, { breaks: true, gfm: true });
+  if (typeof DOMPurify !== 'undefined') html = DOMPurify.sanitize(html);
   return html;
+}
+
+function formatMarkdown(text) {
+  return renderMarkdown(text);
 }
 
 function addMessage(role, content) {
@@ -452,6 +503,25 @@ function addMessage(role, content) {
   const contentDiv = document.createElement('div');
   contentDiv.className = 'content';
   contentDiv.innerHTML = role === 'user' ? escapeHtml(content) : formatMarkdown(content);
+
+  row.appendChild(avatar);
+  row.appendChild(contentDiv);
+  chatBody.appendChild(row);
+  scrollBottom();
+  return row;
+}
+
+function addStreamingMsg() {
+  clearEmpty();
+  const row = document.createElement('div');
+  row.className = 'msg-row agent';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = 'AI';
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'content';
 
   row.appendChild(avatar);
   row.appendChild(contentDiv);
@@ -542,6 +612,9 @@ async function send() {
     const decoder = new TextDecoder();
     let buffer = '';
     let currentToolBlock = null;
+    let streamingMsg = null;   // 正在流式输出的消息 DOM 元素
+    let streamingDiv = null;   // 消息中的 content div
+    let streamingText = '';    // 累积的纯文本,用于 markdown 实时渲染
 
     while (true) {
       const { done, value } = await reader.read();
@@ -564,6 +637,8 @@ async function send() {
           switch (eventType) {
             case 'tool_call':
               removeLoading();
+              streamingMsg = null;  // 工具调用打断文本流
+              streamingText = '';   // 重置累积文本
               currentToolBlock = addToolBlock(data.tool, data.args);
               break;
             case 'tool_result':
@@ -571,14 +646,28 @@ async function send() {
               break;
             case 'text':
               removeLoading();
-              addMessage('agent', data.content);
+              streamingText += data.content;
+              if (!streamingMsg) {
+                // 第一个文本块：创建新的 AI 消息
+                streamingMsg = addStreamingMsg();
+                streamingDiv = streamingMsg.querySelector('.content');
+              }
+              // 实时把累积文本渲染成 markdown（支持流式逐字）
+              streamingDiv.innerHTML = renderMarkdown(streamingText);
+              scrollBottom();
               break;
             case 'error':
               removeLoading();
+              streamingMsg = null;
+              streamingText = '';
               addMessage('agent', '❌ 错误: ' + data.content);
               break;
             case 'done':
               removeLoading();
+              // 最终再渲染一次,确保未闭合的代码块/列表等正确收尾
+              if (streamingDiv) streamingDiv.innerHTML = renderMarkdown(streamingText);
+              streamingMsg = null;
+              streamingText = '';
               break;
           }
         }

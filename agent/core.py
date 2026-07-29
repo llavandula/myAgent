@@ -22,6 +22,7 @@ def _build_llm() -> ChatOpenAI:
         temperature=settings.TEMPERATURE,
         api_key=settings.api_key,
         base_url=settings.base_url,
+        streaming=True,
     )
 
 

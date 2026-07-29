@@ -1,6 +1,8 @@
 """
 FastAPI 后端 —— 将 Agent 暴露为 HTTP + SSE 流式 API。
 
+入口文件，保持薄。后续路由逻辑可迁移到 api/routes.py。
+
 启动:
     python server.py
     访问 http://localhost:8000
@@ -72,8 +74,11 @@ async def chat(request: Request):
     async def event_stream():
         try:
             stream_input = {"messages": [{"role": "user", "content": user_message}]}
+            prev_text = ""  # 上一次推送的累计文本,用于计算增量
 
-            for event in agent.stream(stream_input, config=config, stream_mode="messages"):
+            # 必须用 astream(async for)而非 stream(for),否则同步生成器会
+            # 阻塞事件循环,直到整个 agent 跑完才一次性把事件推给前端。
+            async for event in agent.astream(stream_input, config=config, stream_mode="messages"):
                 if not event:
                     continue
 
@@ -90,25 +95,33 @@ async def chat(request: Request):
                                 "tool": tool_name,
                                 "args": tc.get("args", {}),
                             })
+                        # 切到下一段文本,重置基准(避免重复推送)
+                        prev_text = ""
+
+                    # 流式文本：只推送"上次没发过"的那部分(增量 token)
+                    if hasattr(message, "content") and message.content:
+                        text = message.content
+                        if isinstance(text, str):
+                            if text.startswith(prev_text):
+                                delta = text[len(prev_text):]
+                                prev_text = text
+                                if delta:
+                                    yield _sse_event("text", {"content": delta})
+                            else:
+                                # 异常情况(非累积):整段推送并重置
+                                prev_text = text
+                                if text.strip():
+                                    yield _sse_event("text", {"content": text})
 
                 elif node == "tools":
                     tool_name = message.name if hasattr(message, "name") else "unknown"
                     content = message.content if hasattr(message, "content") else str(message)
+                    # 工具结果回来后重置基准,避免后续文本被错判为已发
+                    prev_text = ""
                     yield _sse_event("tool_result", {
                         "tool": tool_name,
                         "result": str(content)[:500],
                     })
-
-            # 提取最终 AI 回复
-            final_state = agent.get_state(config)
-            if final_state and final_state.values:
-                messages = final_state.values.get("messages", [])
-                for msg in reversed(messages):
-                    if (hasattr(msg, "content") and msg.content
-                            and msg.type == "ai"
-                            and not (hasattr(msg, "tool_calls") and msg.tool_calls)):
-                        yield _sse_event("text", {"content": msg.content})
-                        break
 
             yield _sse_event("done", {})
 

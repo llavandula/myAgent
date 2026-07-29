@@ -8,13 +8,16 @@ Agent 对话入口 —— 启动后即可在终端与 Agent 进行多轮对话�
   exit / quit  → 退出
   reset        → 开始新对话
   tools        → 查看可用工具
+
+注: CLI 模式下暂未接入 strategist 编排流水线，
+    后续可复用 agent/strategist/pipeline.py。
 """
 
 from colorama import init, Fore, Style
 
 from agent.core import get_agent
 
-init(autoreset=True)InMemorySaver
+init(autoreset=True)
 
 
 def print_banner():
