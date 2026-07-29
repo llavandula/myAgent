@@ -121,7 +121,7 @@
 
   /* 每条消息 */
   .msg-row {
-    padding: 24px 16px;
+    padding: 14px 16px;
     display: flex;
     gap: 16px;
     animation: fadeIn .25s ease;
@@ -150,41 +150,124 @@
   }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-  /* 工具调用 */
-  .tool-inline {
-    margin: 8px 0;
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--tool-border);
-    border-radius: 6px;
-    overflow: hidden;
-    font-size: 13px;
-    background: var(--tool-bg);
+  /* ===== 工具组 — 默认折叠，紧凑汇总 ===== */
+  .tool-row {
+    padding: 3px 16px 3px 62px;
+    background: var(--agent-msg-bg);
+    transition: background .3s;
+    animation: fadeIn .25s ease;
   }
-  .tool-inline .tool-header {
-    padding: 8px 12px;
-    cursor: pointer;
+  .tool-group {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--tool-bg);
+    font-size: 13px;
+  }
+  .tool-group-header {
     display: flex;
     align-items: center;
     gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text-secondary);
+    transition: background .15s;
+  }
+  .tool-group-header:hover { background: var(--bg-tertiary); }
+  .tool-group-header .arrow {
+    font-size: 9px;
+    transition: transform .2s;
+    flex-shrink: 0;
+  }
+  .tool-group.open .tool-group-header .arrow { transform: rotate(90deg); }
+  .tool-group-header .summary {
+    flex: 1;
+    font-size: 12px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tool-group-header .summary.pulse {
     color: var(--brand);
-    font-weight: 500;
+  }
+  .tool-group-header .group-status {
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .tool-group-body { display: none; }
+  .tool-group.open .tool-group-body {
+    display: block;
+    padding: 0 10px 8px;
+  }
+
+  /* 工具项列表 */
+  .tool-item {
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .tool-item:first-child { border-top: none; }
+  .tool-item-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
     user-select: none;
   }
-  .tool-inline .tool-header:hover { opacity: .8; }
-  .tool-inline .tool-header .arrow {
-    transition: .2s;
-    font-size: 10px;
+  .tool-item-header:hover { color: var(--text-primary); }
+  .tool-item-icon { font-size: 12px; flex-shrink: 0; width: 16px; text-align: center; }
+  .tool-item-icon.running { color: var(--brand); }
+  .tool-item-icon.success { color: #10a37f; }
+  .tool-item-icon.error { color: #e74c3c; }
+  .tool-item-name { font-weight: 500; flex-shrink: 0; }
+  .tool-item-args {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+  .tool-item-time {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+  }
+  .tool-item-result {
+    display: none;
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .tool-item.result-open .tool-item-result { display: block; }
+  .tool-item-result .truncated {
+    color: var(--brand);
+    cursor: pointer;
+    font-size: 11px;
+    margin-top: 4px;
     display: inline-block;
   }
-  .tool-inline.open .tool-header .arrow { transform: rotate(90deg); }
-  .tool-inline .tool-body {
-    padding: 0 12px 10px;
-    display: none;
-    color: var(--text-secondary);
+  .tool-item-result .truncated:hover { text-decoration: underline; }
+
+  /* 关键动画：脉冲点 */
+  @keyframes pulse {
+    0%, 100% { opacity: .5; }
+    50% { opacity: 1; }
   }
-  .tool-inline.open .tool-body { display: block; }
-  .tool-inline .tool-body .args { margin-bottom: 6px; opacity: .7; }
-  .tool-inline .tool-body .result { color: var(--text-primary); }
+  .tool-item-icon.running {
+    animation: pulse 1s ease-in-out infinite;
+  }
 
   /* 加载动画 */
   .loading {
@@ -530,49 +613,125 @@ function addStreamingMsg() {
   return row;
 }
 
-function addToolBlock(toolName, args) {
+// ====== 工具组系统 ======
+let toolGroupData = null;   // { tools[], completed, startTime }
+
+function createToolGroup() {
   clearEmpty();
   const row = document.createElement('div');
-  row.className = 'msg-row agent';
-
-  const avatar = document.createElement('div');
-  avatar.className = 'avatar';
-  avatar.textContent = 'AI';
-
-  const contentDiv = document.createElement('div');
-  contentDiv.className = 'content';
-
-  const argsStr = args && Object.keys(args).length
-    ? Object.entries(args).map(([k,v]) => `${k}=${JSON.stringify(v)}`).join(', ')
-    : '';
-
-  contentDiv.innerHTML = `
-    <div class="tool-inline open">
-      <div class="tool-header" onclick="this.parentElement.classList.toggle('open')">
+  row.className = 'tool-row';
+  row.innerHTML = `
+    <div class="tool-group open">
+      <div class="tool-group-header" onclick="this.parentElement.classList.toggle('open')">
         <span class="arrow">▶</span>
-        正在使用工具: ${escapeHtml(toolName)}
+        <span class="summary pulse">正在执行...</span>
+        <span class="group-status">⋯</span>
       </div>
-      <div class="tool-body">
-        ${argsStr ? `<div class="args">${escapeHtml(argsStr)}</div>` : ''}
-        <div class="result loading-dots">处理中...</div>
-      </div>
+      <div class="tool-group-body"></div>
     </div>
   `;
-
-  row.appendChild(avatar);
-  row.appendChild(contentDiv);
   chatBody.appendChild(row);
   scrollBottom();
-  return contentDiv.querySelector('.tool-inline');
+  return row.querySelector('.tool-group');
 }
 
-function appendToolResult(block, result) {
-  const resultDiv = block.querySelector('.result');
-  if (resultDiv) {
-    resultDiv.className = 'result';
-    resultDiv.textContent = result;
-  }
+function addToolToGroup(group, id, toolName, args) {
+  const body = group.querySelector('.tool-group-body');
+  const argsStr = args && Object.keys(args).length
+    ? Object.entries(args).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')
+    : '';
+  const div = document.createElement('div');
+  div.className = 'tool-item';
+  div.dataset.toolId = id;
+  div.innerHTML = `
+    <div class="tool-item-header" onclick="this.parentElement.classList.toggle('result-open')">
+      <span class="tool-item-icon running">◌</span>
+      <span class="tool-item-name">${escapeHtml(toolName)}</span>
+      <span class="tool-item-args">${escapeHtml(argsStr)}</span>
+      <span class="tool-item-time">⋯</span>
+    </div>
+    <div class="tool-item-result"><div class="tool-item-result-content"></div></div>
+  `;
+  body.appendChild(div);
+  updateGroupSummary(group);
   scrollBottom();
+}
+
+function updateToolInGroup(group, id, resultText, duration, status) {
+  const item = group.querySelector(`.tool-item[data-tool-id="${id}"]`);
+  if (!item) return;
+  const icon = item.querySelector('.tool-item-icon');
+  const timeEl = item.querySelector('.tool-item-time');
+  const resultContent = item.querySelector('.tool-item-result-content');
+
+  icon.className = `tool-item-icon ${status}`;
+  icon.textContent = status === 'success' ? '✓' : status === 'error' ? '✗' : '⋯';
+  timeEl.textContent = duration != null ? `${duration}s` : '—';
+
+  // 结果显示：截断过长内容
+  const MAX_PREVIEW = 200;
+  if (resultText && resultText.length > MAX_PREVIEW) {
+    const preview = resultText.slice(0, MAX_PREVIEW);
+    resultContent.innerHTML = `${escapeHtml(preview)}<span class="truncated">...展开完整结果</span>`;
+    resultContent.querySelector('.truncated').onclick = function(e) {
+      e.stopPropagation();
+      this.parentElement.textContent = resultText;
+    };
+  } else {
+    resultContent.textContent = resultText || '(空)';
+  }
+
+  // 失败时自动展开该项
+  if (status === 'error') {
+    item.classList.add('result-open');
+    // 展开整个工具组
+    group.classList.add('open');
+  }
+
+  // 更新工具组状态
+  updateGroupSummary(group);
+  scrollBottom();
+}
+
+function updateGroupSummary(group) {
+  const tools = group.querySelectorAll('.tool-item');
+  const header = group.querySelector('.tool-group-header');
+  const summary = header.querySelector('.summary');
+  const groupStatus = header.querySelector('.group-status');
+
+  let total = tools.length;
+  let completed = 0;
+  let hasError = false;
+  let totalTime = 0;
+  let timeCount = 0;
+
+  tools.forEach(t => {
+    const icon = t.querySelector('.tool-item-icon');
+    const timeText = t.querySelector('.tool-item-time').textContent;
+    if (icon.classList.contains('success')) { completed++; totalTime += parseFloat(timeText) || 0; timeCount++; }
+    else if (icon.classList.contains('error')) { completed++; hasError = true; }
+  });
+
+  let isRunning = completed < total;
+
+  if (isRunning) {
+    summary.className = 'summary pulse';
+    summary.textContent = `正在执行 ${completed+1}/${total}...`;
+    groupStatus.textContent = '⋯';
+    group.classList.add('open');  // 执行中自动展开
+  } else {
+    summary.className = 'summary';
+    const avgTime = timeCount > 0 ? (totalTime / timeCount).toFixed(2) : '?';
+    const maxTime = timeCount > 0 ? Math.max(...Array.from(tools).map(t => {
+      const v = parseFloat(t.querySelector('.tool-item-time').textContent);
+      return isNaN(v) ? 0 : v;
+    })).toFixed(2) : '?';
+    summary.textContent = `✓ 已完成 ${total} 个工具 · ${maxTime}s`;
+    if (hasError) summary.textContent = `✗ 完成 ${total} 个工具（含错误）· ${maxTime}s`;
+    groupStatus.textContent = hasError ? '✗' : '✓';
+    if (!hasError) group.classList.remove('open');  // 全成功则折叠
+    scrollBottom();
+  }
 }
 
 function addLoading() {
@@ -611,7 +770,7 @@ async function send() {
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let currentToolBlock = null;
+    let toolGroup = null;       // 当前工具组 DOM
     let streamingMsg = null;   // 正在流式输出的消息 DOM 元素
     let streamingDiv = null;   // 消息中的 content div
     let streamingText = '';    // 累积的纯文本,用于 markdown 实时渲染
@@ -639,13 +798,16 @@ async function send() {
               removeLoading();
               streamingMsg = null;  // 工具调用打断文本流
               streamingText = '';   // 重置累积文本
-              currentToolBlock = addToolBlock(data.tool, data.args);
+              if (!toolGroup) toolGroup = createToolGroup();
+              addToolToGroup(toolGroup, data.id, data.tool, data.args);
               break;
             case 'tool_result':
-              if (currentToolBlock) appendToolResult(currentToolBlock, data.result);
+              if (toolGroup) updateToolInGroup(toolGroup, data.id, data.result, data.duration, data.status);
               break;
             case 'text':
               removeLoading();
+              // 工具组已完成 → 折叠
+              if (toolGroup) { toolGroup = null; }
               streamingText += data.content;
               if (!streamingMsg) {
                 // 第一个文本块：创建新的 AI 消息
@@ -660,6 +822,7 @@ async function send() {
               removeLoading();
               streamingMsg = null;
               streamingText = '';
+              toolGroup = null;
               addMessage('agent', '❌ 错误: ' + data.content);
               break;
             case 'done':
@@ -668,6 +831,7 @@ async function send() {
               if (streamingDiv) streamingDiv.innerHTML = renderMarkdown(streamingText);
               streamingMsg = null;
               streamingText = '';
+              toolGroup = null;
               break;
           }
         }

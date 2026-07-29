@@ -9,28 +9,30 @@ FastAPI 后端 —— 将 Agent 暴露为 HTTP + SSE 流式 API。
 """
 
 import json
+import time
 import uuid
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from agent.core import get_agent
+from agent.core import get_agent, create_pipeline
 
 app = FastAPI(title="Agent Chat")
 
 # 每个会话一个 agent 实例（生产环境应换成 Redis 等）
-sessions: dict[str, object] = {}
+sessions: dict[str, dict] = {}
 
 # 挂载静态文件目录
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 def get_or_create_agent(session_id: str):
-    """为每个 session 创建独立的 agent 实例，互不干扰。"""
+    """为每个 session 创建独立的 agent + pipeline 实例，互不干扰。"""
     if session_id not in sessions:
-        agent_graph, _, _ = get_agent()
-        sessions[session_id] = agent_graph
-    return sessions[session_id]
+        agent_graph = get_agent()
+        pipeline = create_pipeline()
+        sessions[session_id] = {"agent": agent_graph, "pipeline": pipeline}
+    return sessions[session_id]["agent"], sessions[session_id]["pipeline"]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -68,17 +70,30 @@ async def chat(request: Request):
             media_type="text/event-stream",
         )
 
-    agent = get_or_create_agent(session_id)
-    config = {"configurable": {"thread_id": session_id}}
+    agent, pipeline = get_or_create_agent(session_id)
 
     async def event_stream():
         try:
-            stream_input = {"messages": [{"role": "user", "content": user_message}]}
+            # ── 前置：构建上下文，拼入输入消息 ──
+            context_pkg = await pipeline.build(session_id, user_message)
+            context_str = context_pkg.recent_history[0] if context_pkg.recent_history else ""
+
+            messages = []
+            if context_str:
+                messages.append({
+                    "role": "system",
+                    "content": f"以下是本对话之前的历史：\n{context_str}",
+                })
+            messages.append({"role": "user", "content": user_message})
+
+            stream_input = {"messages": messages}
             prev_text = ""  # 上一次推送的累计文本,用于计算增量
+            full_ai_response = ""  # 累计完整回复,用于存入记忆
+            tool_starts: dict[str, float] = {}  # tool_call_id → 开始时间
 
             # 必须用 astream(async for)而非 stream(for),否则同步生成器会
             # 阻塞事件循环,直到整个 agent 跑完才一次性把事件推给前端。
-            async for event in agent.astream(stream_input, config=config, stream_mode="messages"):
+            async for event in agent.astream(stream_input, stream_mode="messages"):
                 if not event:
                     continue
 
@@ -89,9 +104,12 @@ async def chat(request: Request):
                     if hasattr(message, "tool_calls") and message.tool_calls:
                         for tc in message.tool_calls:
                             tool_name = tc.get("name") or ""
+                            tool_id = tc.get("id") or str(uuid.uuid4())
                             if not tool_name:
                                 continue
+                            tool_starts[tool_id] = time.time()
                             yield _sse_event("tool_call", {
+                                "id": tool_id,
                                 "tool": tool_name,
                                 "args": tc.get("args", {}),
                             })
@@ -105,23 +123,40 @@ async def chat(request: Request):
                             if text.startswith(prev_text):
                                 delta = text[len(prev_text):]
                                 prev_text = text
+                                full_ai_response = text
                                 if delta:
                                     yield _sse_event("text", {"content": delta})
                             else:
                                 # 异常情况(非累积):整段推送并重置
                                 prev_text = text
+                                full_ai_response = text
                                 if text.strip():
                                     yield _sse_event("text", {"content": text})
 
                 elif node == "tools":
                     tool_name = message.name if hasattr(message, "name") else "unknown"
-                    content = message.content if hasattr(message, "content") else str(message)
+                    content = str(message.content) if hasattr(message, "content") else str(message)
+                    tool_call_id = getattr(message, "tool_call_id", None) or ""
+                    start = tool_starts.pop(tool_call_id, None)
+                    duration = round(time.time() - start, 2) if start else None
+                    # 判断状态：拒绝执行、出错标记为 error
+                    status = "error" if any(
+                        content.startswith(prefix) for prefix in ["[拒绝执行]", "[执行出错]", "[超时]", "计算出错", "❌"]
+                    ) else "success"
                     # 工具结果回来后重置基准,避免后续文本被错判为已发
                     prev_text = ""
                     yield _sse_event("tool_result", {
+                        "id": tool_call_id,
                         "tool": tool_name,
-                        "result": str(content)[:500],
+                        "result": content[:500],
+                        "duration": duration,
+                        "status": status,
                     })
+
+            # ── 后置：将本轮对话存入记忆 ──
+            await pipeline.store_message(session_id, "user", user_message)
+            if full_ai_response.strip():
+                await pipeline.store_message(session_id, "assistant", full_ai_response)
 
             yield _sse_event("done", {})
 

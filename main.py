@@ -47,13 +47,13 @@ def show_tools():
 
 def reload_agent():
     """重新创建 agent（重置对话记忆）。"""
-    agent, checkpointer, thread_id = get_agent()
-    return agent, thread_id
+    agent = get_agent()
+    return agent
 
 
 def main():
     print_banner()
-    agent, thread_id = reload_agent()
+    agent = reload_agent()
 
     while True:
         try:
@@ -70,7 +70,7 @@ def main():
             break
 
         if user_input.lower() == "reset":
-            agent, thread_id = reload_agent()
+            agent = reload_agent()
             print(Fore.YELLOW + "\n🔄 对话已重置，开始新会话！")
             continue
 
@@ -79,11 +79,11 @@ def main():
             continue
 
         # --- 调用 Agent（stream 模式，展示工具调用过程）---
-        config = {"configurable": {"thread_id": thread_id}}
         try:
             stream_input = {"messages": [{"role": "user", "content": user_input}]}
 
-            for event in agent.stream(stream_input, config=config, stream_mode="messages"):
+            full_response = ""
+            for event in agent.stream(stream_input, stream_mode="messages"):
                 if not event:
                     continue
 
@@ -105,22 +105,21 @@ def main():
                                 )
                                 print(Fore.BLUE + f"     参数: {args_str}")
 
+                    # 跟踪完整回复文本
+                    if hasattr(message, "content") and message.content:
+                        text = message.content
+                        if isinstance(text, str):
+                            full_response = text
+
                 elif node == "tools":
                     tool_name = message.name if hasattr(message, "name") else "unknown"
                     content = message.content if hasattr(message, "content") else str(message)
                     content_preview = content[:200] + "..." if len(str(content)) > 200 else content
                     print(Fore.YELLOW + f"  📋 {tool_name} 返回: {content_preview}")
 
-            # --- 提取 AI 最终回复 ---
-            final_state = agent.get_state(config)
-            if final_state and final_state.values:
-                messages = final_state.values.get("messages", [])
-                for msg in reversed(messages):
-                    if (hasattr(msg, "content") and msg.content
-                            and msg.type == "ai"
-                            and not (hasattr(msg, "tool_calls") and msg.tool_calls)):
-                        print(Fore.WHITE + "\nAgent: " + msg.content)
-                        break
+            # --- 显示 AI 最终回复 ---
+            if full_response.strip():
+                print(Fore.WHITE + "\nAgent: " + full_response)
 
             print()
 

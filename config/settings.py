@@ -24,7 +24,7 @@ class Settings:
 
     # ---- 记忆策略 ----
     MEMORY_STRATEGY: str = os.getenv("MEMORY_STRATEGY", "buffer")   # buffer / summary / hybrid
-    MEMORY_MAX_TURNS: int = int(os.getenv("MEMORY_MAX_TURNS", "20"))
+    MEMORY_MAX_TURNS: int = int(os.getenv("MEMORY_MAX_TURNS", "1"))
     MEMORY_MAX_TOKENS: int = int(os.getenv("MEMORY_MAX_TOKENS", "4000"))
     SUMMARY_INTERVAL: int = int(os.getenv("SUMMARY_INTERVAL", "5"))
 
