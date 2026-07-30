@@ -8,7 +8,6 @@
 """
 
 import datetime
-import locale
 import re
 import subprocess
 import sys
@@ -114,18 +113,17 @@ def _is_safe_command(command: str) -> tuple[bool, str]:
 
 def _get_system_encoding() -> str:
     """
-    获取子进程输出的正确编码。
-    - Windows: cmd.exe 使用 OEM 代码页（如 cp936 = GBK 简体中文）
-    - Linux/macOS: 通常是 UTF-8
+    获取子进程输出的解码编码。
+
+    关键点：不在这里探测系统的"原始"代码页（OEM cp936 / 当前 chcp），
+    因为 cmd.exe 的代码页和实际输出的编码经常不一致（PowerShell 切到 65001
+    后再起 cmd 子进程，输出可能是 UTF-8；反之亦然）。固定探测会带来不可控的乱码。
+
+    正确做法是在执行前用 `chcp 65001` 强制 shell 切到 UTF-8，
+    这样输出字节流和解码端都统一是 UTF-8，不会再歧义。
     """
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            cp = ctypes.windll.kernel32.GetOEMCP()
-            return f"cp{cp}"
-        except Exception:
-            return locale.getpreferredencoding() or "gbk"
-    return locale.getpreferredencoding() or "utf-8"
+    # 类 Unix 系统天然 UTF-8；Windows 我们会先 chcp 65001 也按 UTF-8 解码
+    return "utf-8"
 
 
 @tool
@@ -137,9 +135,18 @@ def run_command(command: str) -> str:
     if not safe:
         return f"[拒绝执行] {reason}\n命令: {command}"
 
+    # Windows：先 chcp 65001 切到 UTF-8 代码页，再执行命令，统一按 UTF-8 解码
+    # 用 '>nul'（cmd）或 '> $null'（PowerShell）屏蔽 chcp 自身的输出
+    if sys.platform == "win32":
+        # 兼容 cmd.exe 与 PowerShell：用 cmd 的 chcp 即可，两个 shell 都能识别
+        # '&&' 保证 chcp 成功后再执行原命令
+        real_command = f'chcp 65001 >nul && {command}'
+    else:
+        real_command = command
+
     try:
         result = subprocess.run(
-            command,
+            real_command,
             shell=True,
             capture_output=True,
             text=True,
